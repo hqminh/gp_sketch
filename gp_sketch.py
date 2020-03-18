@@ -109,7 +109,7 @@ if __name__ == '__main__':
 
             # eigen
             plt.close()
-            plt.plot(range(n_iter + 1), min_eigens, '-d', color='r', lw=1.5,
+            plt.plot(range(i + 1), min_eigens, '-d', color='r', lw=1.5,
                      # label='min_eigen_vals'
                      )
             plt.ylabel('minimum eigen values', fontsize=24)
@@ -128,7 +128,7 @@ if __name__ == '__main__':
             plt.show()
 
             plt.close()
-            plt.plot(range(n_iter + 1), np.log(np.array(min_eigens)), '-x',
+            plt.plot(range(i + 1), np.log(np.array(min_eigens)), '-x',
                      color='g', lw=1.5,
                      # label='min_eigen_vals'
                      )
