@@ -53,8 +53,8 @@ class SGP(nn.Module):
     def NLL(self):
         pass
 
-    def nystrom(self, x):
-        S = self.sampler.recursive_sampling(self.data['X'], tolerance=0.1)
+    def nystrom(self, x, tolerance=0.1):
+        S = self.sampler.recursive_sampling(self.data['X'], tolerance)
         selected = torch.argmax(S, dim=0)
         Xs = self.data['X'][selected, :]
         Kts = self.cov(x, Xs)
@@ -63,9 +63,9 @@ class SGP(nn.Module):
         #phi = torch.pinverse(Kss)
         return Kts, Kss, Kxs
 
-    def forward(self, x):
+    def forward(self, x, tolerance=0.1):
         y = self.data['Y'] - self.mean(self.data['X'])
-        Kts, Kss, Kxs = self.nystrom(x)
+        Kts, Kss, Kxs = self.nystrom(x, tolerance)
         Ksx = Kxs.t()
         t1 = torch.inverse(Kss + torch.exp(-2.0 * self.lik.noise) * torch.mm(Ksx, Kxs))
         y_pred = self.mean(x) + torch.exp(-2.0 * self.lik.noise) * torch.mm(Kts, torch.mm(t1, torch.mm(Ksx, y)))
