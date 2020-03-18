@@ -105,7 +105,7 @@ if __name__ == '__main__':
             # plt.title('GP vs SGP', fontsize=30)
             plt.savefig('sgp_diff_gp_iter{}.pdf'.format(i+1))
 
-            plt.show()
+            # plt.show()
 
             # eigen
             plt.close()
@@ -125,7 +125,7 @@ if __name__ == '__main__':
             plt.tight_layout()
             # plt.title('GP vs SGP', fontsize=30)
             plt.savefig('min_eigen_iter{}.pdf'.format(i+1))
-            plt.show()
+            # plt.show()
 
             plt.close()
             plt.plot(range(i + 1), np.log(np.array(min_eigens)), '-x',
@@ -145,7 +145,7 @@ if __name__ == '__main__':
             plt.tight_layout()
             # plt.title('GP vs SGP', fontsize=30)
             plt.savefig('log_min_eigen_iter{}.pdf'.format(i+1))
-            plt.show()
+            # plt.show()
 
     print('Done')
 
