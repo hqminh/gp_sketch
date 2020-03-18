@@ -28,7 +28,7 @@ if __name__ == '__main__':
     n_data = 2000
     n_test = 100
     n_dim = 200
-    n_iter = 2
+    n_iter = 200
     tolerance = 0.1
     lr = 0.2
 
