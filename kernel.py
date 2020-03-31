@@ -6,6 +6,7 @@ from torch import nn
 
 class CovFunction(nn.Module):
     def __init__(self, n_dim, c=0.0, ls=None):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         super(CovFunction, self).__init__()
         self.n_dim = n_dim
         if ls is None:
@@ -14,14 +15,21 @@ class CovFunction(nn.Module):
             self.weights = nn.Parameter(ls, requires_grad=True)
         self.sn = nn.Parameter(torch.tensor(c), requires_grad=True)
 
+        self.weights.to(self.device)
+        self.sn.to(self.device)
+
     def forward(self, U, V = None):  # U is of size _ by n_dim, V is of size _ by n_dim
+        U = U.to(self.device)
+
         if V is None:
             V = U
 
         assert (len(U.size()) == 2) and (len(V.size()) == 2), "Input matrices must be 2D"
         assert U.size(1) == V.size(1), "Input matrices must agree on the second dimension"
         diff = V[None, :, None, :] - U[:, None, :, None]  # m by n by d by d
-        scales = torch.exp(-1.0 * self.weights) * torch.eye(self.n_dim) # diagonal by by d -- containing length-scale on diag
+        scales = torch.exp(-1.0 * self.weights) * torch.eye(self.n_dim).to(
+            self.device) #
+        # diagonal by by d -- containing length-scale on diag
         cov = (diff * scales[None, None, :, :]) ** 2  # n by m by d by d @ 1 by 1 by d by d
         cov = torch.exp(-0.5 * torch.sum(cov, dim = [2, 3])) # n by m by d by d ==> n by m after sum
         return torch.exp(2.0 * self.sn) * cov
@@ -29,10 +37,15 @@ class CovFunction(nn.Module):
 
 class MeanFunction(nn.Module):  # simply a constant mean function
     def __init__(self, c=0.0, opt=True):
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
         super(MeanFunction, self).__init__()
-        self.mean = nn.Parameter(torch.tensor(c), requires_grad=opt)
+        self.mean = nn.Parameter(torch.tensor(c), requires_grad=opt).to(
+            self.device)
 
     def forward(self, U):  # simply the constant mean function; input form: (_, x_dim)
+        U = U.to(self.device)
+
         assert len(U.size()) == 2, "Input matrix must be 2D"
         n = U.size(0)
         return torch.ones(n, 1) * self.mean
@@ -40,10 +53,16 @@ class MeanFunction(nn.Module):  # simply a constant mean function
 
 class LikFunction(nn.Module):  # return log likelihood of a Gaussian N(z | x, noise^2 * I)
     def __init__(self, c=0.0, opt=True):
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
         super(LikFunction, self).__init__()
-        self.noise = nn.Parameter(torch.tensor(c), requires_grad=opt)
+        self.noise = nn.Parameter(torch.tensor(c), requires_grad=opt).to(
+            self.device)
 
     def forward(self, o, x):  # both are n_sample, n_dim -- assert that they have the same dim
+        o = o.to(self.device)
+        x = x.to(self.device)
+
         assert (len(o.size()) == 2) and (len(o.size()) == 2), \
             "Input matrices must be 2D"
         assert (o.size(0) == x.size(0)) and (o.size(1) == x.size(1)), \

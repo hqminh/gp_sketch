@@ -86,9 +86,12 @@ class GP(nn.Module):
 
     def NLL(self):
         y = self.data['Y'] - self.mean(self.data['X'])
-        Kxx = self.cov(self.data['X'])
-        Q_inv = torch.inverse(Kxx + torch.exp(2.0 * self.lik.noise) * torch.eye(self.n_data))
-        nll = -0.5 * torch.logdet(Q_inv) + 0.5 * torch.mm(y.t(), torch.mm(Q_inv, y))[0, 0]
+        y = y.to(self.device)
+        Kxx = self.cov(self.data['X']).to(self.device)
+        Q_inv = torch.inverse(Kxx + torch.exp(2.0 * self.lik.noise) *
+                              torch.eye(self.n_data).to(self.device))
+        nll = -0.5 * torch.logdet(Q_inv) + 0.5 * torch.mm(y.t().to(self.device),
+                                torch.mm(Q_inv, y).to(self.device))[0, 0]
         return nll
 
     def forward(self, x):

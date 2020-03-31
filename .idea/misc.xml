@@ -113,9 +113,6 @@
     </entry>
   </component>
   <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.7.1 (/Library/Frameworks/Python.framework/Versions/3.7/bin/python3.7)" project-jdk-type="Python SDK" />
-  <component name="SvnConfiguration">
-    <configuration>$USER_HOME$/.subversion</configuration>
-  </component>
   <component name="masterDetails">
     <states>
       <state key="ScopeChooserConfigurable.UI">
