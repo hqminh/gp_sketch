@@ -51,21 +51,28 @@ class SGP(nn.Module):
         self.sampler = Sampler(self.lik.noise, self.n_dim).to(self.device)
 
     def NLL(self):
-        pass
+        Kss, Kxs = self.nystrom()
+        y = self.data['Y'] - self.mean(self.data['X'])
+        Kxx = torch.mm(Kxs, torch.mm(Kss, Kxs.t()))
+        Q_inv = torch.inverse(Kxx + torch.exp(2.0 * self.lik.noise) * torch.eye(self.n_data))
+        nll = -0.5 * torch.logdet(Q_inv) + 0.5 * torch.mm(y.t(), torch.mm(Q_inv, y))[0, 0]
+        return nll
 
-    def nystrom(self, x, tolerance=0.1):
-        S = self.sampler.recursive_sampling(self.data['X'], tolerance)
+    def nystrom(self, x=None):
+        S = self.sampler.recursive_sampling(self.data['X'], tolerance=0.1)
         selected = torch.argmax(S, dim=0)
         Xs = self.data['X'][selected, :]
-        Kts = self.cov(x, Xs)
         Kss = self.cov(Xs)
         Kxs = self.cov(self.data['X'], Xs)
-        #phi = torch.pinverse(Kss)
+        if x is None:
+            return Kss, Kxs
+
+        Kts = self.cov(x, Xs)
         return Kts, Kss, Kxs
 
-    def forward(self, x, tolerance=0.1):
+    def forward(self, x):
         y = self.data['Y'] - self.mean(self.data['X'])
-        Kts, Kss, Kxs = self.nystrom(x, tolerance)
+        Kts, Kss, Kxs = self.nystrom(x)
         Ksx = Kxs.t()
         t1 = torch.inverse(Kss + torch.exp(-2.0 * self.lik.noise) * torch.mm(Ksx, Kxs))
         y_pred = self.mean(x) + torch.exp(-2.0 * self.lik.noise) * torch.mm(Kts, torch.mm(t1, torch.mm(Ksx, y)))
@@ -86,12 +93,9 @@ class GP(nn.Module):
 
     def NLL(self):
         y = self.data['Y'] - self.mean(self.data['X'])
-        y = y.to(self.device)
-        Kxx = self.cov(self.data['X']).to(self.device)
-        Q_inv = torch.inverse(Kxx + torch.exp(2.0 * self.lik.noise) *
-                              torch.eye(self.n_data).to(self.device))
-        nll = -0.5 * torch.logdet(Q_inv) + 0.5 * torch.mm(y.t().to(self.device),
-                                torch.mm(Q_inv, y).to(self.device))[0, 0]
+        Kxx = self.cov(self.data['X'])
+        Q_inv = torch.inverse(Kxx + torch.exp(2.0 * self.lik.noise) * torch.eye(self.n_data))
+        nll = -0.5 * torch.logdet(Q_inv) + 0.5 * torch.mm(y.t(), torch.mm(Q_inv, y))[0, 0]
         return nll
 
     def forward(self, x):
@@ -105,3 +109,4 @@ class GP(nn.Module):
         y_var = ktt - torch.mm(ktx_Q_inv, ktx.t())
 
         return y_pred, y_var
+
