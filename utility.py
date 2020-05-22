@@ -1,72 +1,31 @@
-import numpy as np
 import torch
-from scipy.stats import ortho_group
-
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as opt
+import numpy as np
+import copy
+from matplotlib import pyplot as plt
+from sklearn import cluster
+import pickle
 
 def generate_data(n_data, n_test, n_dim):
+    device = get_cuda_device()
     data = dict()
     test = dict()
-    A = ts(np.random.random((n_dim, 1)))
-    data['X'] = ts(np.random.random((n_data, n_dim)))
+    A = ts(np.random.random((n_dim, 1))).to(device)
+    data['X'] = ts(np.random.random((n_data, n_dim))).to(device)
     data['Y'] = torch.mm(data['X'], A)
-    test['X'] = ts(np.random.random((n_test, n_dim)))
+    test['X'] = ts(np.random.random((n_test, n_dim))).to(device)
     test['Y'] = torch.mm(test['X'], A)
 
-    '''
-        selected = sample_rows(np.ones(n_data) / np.sqrt(n_data), n_data)
-        print(selected)
-        for id in range(n_data):
-            if id in selected:
-                data['X'][id, :] = 1.0 * data['X'][id, :]
-            else:
-                data['X'][id, :] = 0.0 * data['X'][id, :]
-        '''
-
     return data, test
-
-
-def generate_synthetic(len_data, n_features):
-    """Synthetic data for Linear Regression problem"""
-
-    rank = 1.
-
-    # Synthetic hyper-params
-    Lm = (2 ** rank + 1) ** 2
-    d = n_features
-
-    # create a diagnomal matrix Dm
-    row_Dm = np.random.uniform(0.5 * np.sqrt(Lm), np.sqrt(Lm), size=d)
-    index = np.random.randint(0, d)
-    row_Dm[index] = np.sqrt(Lm)
-    Dm = np.diag(row_Dm)
-
-    # orthornomal row U and V
-    U = ortho_group.rvs(dim=d)  # d x d
-    V = generate_orthonomal(d, len_data)
-
-    # data
-    Xm = U.dot(Dm).dot(V)
-    x = Xm.T  # n x d
-
-    # labels
-    w_star = np.ones(d)
-    # noise = np.random.normal(0., 1., len_data)
-    y = x.dot(w_star)
-    y = y.reshape(len(y), 1)
-
-    x_tensor = torch.from_numpy(x)
-    y_tensor = torch.from_numpy(y)
-
-    return {'X': x_tensor, 'Y': y_tensor}
 
 
 def abalone_data(is_train=True):
     tail = 'train' if is_train else 'test'
     datapath = './data/abalone/abalone.{}'.format(tail)
-
-
+    device = get_cuda_device()
     X, y = [], []
-    # dataset = []
     with open(datapath) as f:
         for line in f:
             line = line.strip().split(',')
@@ -87,22 +46,14 @@ def abalone_data(is_train=True):
     y = np.array(y)
     y = y.reshape(len(y), 1)
 
-    x_tensor = torch.from_numpy(X)
-    y_tensor = torch.from_numpy(y)
-
-    return {'X': x_tensor, 'Y': y_tensor}, len(X)
-
-
-def generate_orthonomal(d, n):
-    """Generate d x n matrix that has d rows orthonormal to each other"""
-    A = np.zeros((d, n))
-    for i in range(d):
-        A[i] = np.random.random(n)
-        for j in range(i):
-            A[i] -= A[i].dot(A[j]) * A[j]
-        A[i] /= np.linalg.norm(A[i])
-
-    return A
+    x_tensor = torch.from_numpy(X).to(device)
+    y_tensor = torch.from_numpy(y).to(device)
+    xmean = torch.mean(x_tensor, dim=0)
+    xstd = torch.std(x_tensor, dim=0)
+    print(x_tensor.shape, xmean.shape, xstd.shape)
+    x_tensor = (x_tensor - xmean) / (xstd)
+    #y_tensor = y_tensor - torch.mean(y_tensor)
+    return {'X': x_tensor.float(), 'Y': y_tensor.float()}, len(X)
 
 
 def sample_rows(prob, n_rows):
@@ -116,8 +67,8 @@ def sample_rows(prob, n_rows):
 
 
 def rmse(y1, y2):
-    diff = y1 - y2
-    return torch.sqrt(torch.mm(diff.t(), diff) / diff.shape[0])
+    diff = y1.float() - y2.float()
+    return torch.sqrt(torch.dot(diff.view(-1), diff.view(-1)) / diff.shape[0])
 
 
 def ts(X):
@@ -125,19 +76,8 @@ def ts(X):
 
 
 def dt(X):
-    return X.detach().numpy()
+    return X.detach().cpu().numpy()
 
 
 def get_cuda_device():
-    return torch.device(
-        "cuda" if torch.cuda.is_available() else "cpu")  # set device
-
-
-def get_min_eigen_val(gp):
-    """gp object has data inside: gp.data and covariance kerneled matrix: 
-        gp.cov 
-    """
-    values, vectors = torch.eig(gp.cov(gp.data['X']), eigenvectors=True)
-    return torch.min(values)
-
-
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")  # set device

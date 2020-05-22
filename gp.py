@@ -80,33 +80,96 @@ class SGP(nn.Module):
 
 
 class GP(nn.Module):
-    def __init__(self, data):
+    def __init__(self, data, cov_func='exponential', ls=None):
         super(GP, self).__init__()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = get_cuda_device()
         self.data = data
         self.n_data = data['X'].shape[0]
         self.n_dim = data['X'].shape[1]
-        self.cov = CovFunction(self.n_dim).to(self.device)
+        if cov_func == 'exponential':
+            self.cov = CovFunction(self.n_dim, ls=ls).to(self.device)
+        elif 'spectral' in cov_func:
+            n_eps = float(cov_func.split('_')[1])
+            self.cov = SpectralCov(self.n_dim, n_eps=n_eps, ls=ls).to(self.device)
+        elif 'chi' in cov_func:
+            n_eps = float(cov_func.split('_')[1])
+            self.cov = ChiSpectralCov(self.n_dim, n_eps=n_eps, ls=ls).to(self.device)
         self.mean = MeanFunction().to(self.device)
         self.lik = LikFunction().to(self.device)
-        self.sampler = Sampler(self.lik.noise, self.n_dim).to(self.device)
 
-    def NLL(self):
-        y = self.data['Y'] - self.mean(self.data['X'])
+    def NLL_old(self):
+        y = self.data['Y'].float() - self.mean(self.data['X']).float()
         Kxx = self.cov(self.data['X'])
-        Q_inv = torch.inverse(Kxx + torch.exp(2.0 * self.lik.noise) * torch.eye(self.n_data))
+        Q_inv = torch.inverse(Kxx + torch.exp(2.0 * self.lik.noise) * torch.eye(self.n_data).to(self.device)).float()
         nll = -0.5 * torch.logdet(Q_inv) + 0.5 * torch.mm(y.t(), torch.mm(Q_inv, y))[0, 0]
         return nll
 
+    def NLL(self):
+        y = self.data['Y'].float() - self.mean(self.data['X']).float()
+        Kxx = self.cov(self.data['X'])
+        torch.diagonal(Kxx).fill_(torch.exp(2.0 * self.cov.sn) + torch.exp(2.0 * self.lik.noise))
+        L = torch.cholesky(Kxx, upper=False)
+        Linv = torch.mm(torch.inverse(L), y)
+        nll = 0.5 * torch.sum(torch.log(L.diag())) + 0.5 * torch.mm(Linv.t(), Linv)
+        return nll
+
     def forward(self, x):
-        y = self.data['Y'] - self.mean(self.data['X'])
-        ktx = self.cov(x, self.data['X'])
+        y = self.data['Y'].float() - self.mean(self.data['X']).float()
+        ktx = self.cov(x, self.data['X']).float()
         ktt = self.cov(x)
         Kxx = self.cov(self.data['X'])
-        Q_inv = torch.inverse(Kxx + torch.exp(2.0 * self.lik.noise) * torch.eye(self.n_data))
+        Q_inv = torch.inverse(Kxx + torch.exp(2.0 * self.lik.noise) * torch.eye(self.n_data).to(self.device)).float()
         ktx_Q_inv = torch.mm(ktx, Q_inv)
         y_pred = self.mean(x) + torch.mm(ktx_Q_inv, y)
         y_var = ktt - torch.mm(ktx_Q_inv, ktx.t())
-
         return y_pred, y_var
 
+
+class GPCluster(nn.Module):
+    def __init__(self, data, cov_func='exponential', ls=None):
+        super(GPCluster, self).__init__()
+        self.device = get_cuda_device()
+        self.data = data
+        self.n_dim = self.data[0]['X'].shape[1]
+        if cov_func == 'exponential':
+            self.cov = CovFunction(self.n_dim, ls=ls).to(self.device)
+        elif 'spectral' in cov_func:
+            n_eps = float(cov_func.split('_')[1])
+            self.cov = SpectralCov(self.n_dim, n_eps=n_eps, ls=ls).to(self.device)
+        elif 'chi' in cov_func:
+            n_eps = float(cov_func.split('_')[1])
+            self.cov = ChiSpectralCov(self.n_dim, n_eps=n_eps, ls=ls).to(self.device)
+        self.mean = MeanFunction().to(self.device)
+        self.lik = LikFunction().to(self.device)
+        self.y_mean, self.n_data = self.get_mean()
+
+    def get_mean(self):
+        y_mean = 0.0
+        n_data = []
+        for i in range(self.data['k']):
+            n_data.append(self.data[i]['Y'].shape[0])
+            y_mean += torch.sum(self.data[i]['Y'])
+        return y_mean / sum(n_data), n_data
+
+    def NLL(self):
+        for i in range(self.data['k']):
+            y = self.data[i]['Y'].float() - self.mean(self.data[i]['X']).float()
+            Kxx = self.cov(self.data[i]['X'])
+            Q_inv = torch.inverse(Kxx + torch.exp(2.0 * self.lik.noise) * torch.eye(self.n_data[i]).to(self.device)).float()
+            nll = -0.5 * torch.logdet(Q_inv) + 0.5 * torch.mm(y.t(), torch.mm(Q_inv, y))[0, 0]
+        return nll
+
+    def forward(self, x):
+        ktt = self.cov(x)
+        y_pred = torch.zeros(x.shape[0], 1).to(self.device)
+        y_var = torch.zeros(x.shape[0], x.shape[0]).to(self.device)
+        for i in range(self.data['k']):
+            y = self.data[i]['Y'].float() - self.mean(self.data[i]['X'])
+            ktx = self.cov(x, self.data[i]['X']).float()
+            Kxx = self.cov(self.data[i]['X'])
+            Q_inv = torch.inverse(Kxx + torch.exp(2.0 * self.lik.noise) * torch.eye(self.n_data[i]).to(self.device)).float()
+            ktx_Q_inv = torch.mm(ktx, Q_inv)
+            y_pred += self.mean(x) + torch.mm(ktx_Q_inv, y)
+            y_var += ktt - torch.mm(ktx_Q_inv, ktx.t())
+
+        return y_pred, y_var
