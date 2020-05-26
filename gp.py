@@ -11,6 +11,8 @@ class Sampler(nn.Module):
         self.cov = CovFunction(n_dim).to(self.device)
 
     def recursive_sampling(self, X, tolerance):
+        X = X.to(self.device)
+
         m = X.shape[0]
         print(m)
         if m <= 192 * np.log(1.0 / tolerance):
@@ -19,13 +21,17 @@ class Sampler(nn.Module):
         selected = sample_rows(0.5 * np.ones(m), m)
         Xs = X[selected, :].view(-1, self.n_dim)
         Ss = torch.eye(m)[:, selected].view(m, -1).to(self.device)
-        St = self.recursive_sampling(Xs, tolerance / 3.0)
+        St = self.recursive_sampling(Xs, tolerance /
+                                                       3.0).to(self.device)
         print(St.shape[1])
         Sh = torch.mm(Ss, St)
         selected = torch.argmax(Sh, dim=1)
         Xh = X[selected, :].view(-1, self.n_dim)
         Khh = self.cov(Xh)
-        phi = torch.inverse(Khh + torch.exp(2.0 * self.noise) * torch.eye(selected.shape[0]))
+        phi = torch.inverse(Khh +
+                            torch.exp(2.0 * self.noise).to(self.device) *
+                            torch.eye(selected.shape[0]).to(self.device)
+                            )
         l = np.zeros(m)
         for i in range(m):
             Kii = self.cov(X[i, :].view(1, -1))[0, 0]
@@ -75,7 +81,12 @@ class SGP(nn.Module):
         Kts, Kss, Kxs = self.nystrom(x)
         Ksx = Kxs.t()
         t1 = torch.inverse(Kss + torch.exp(-2.0 * self.lik.noise) * torch.mm(Ksx, Kxs))
-        y_pred = self.mean(x) + torch.exp(-2.0 * self.lik.noise) * torch.mm(Kts, torch.mm(t1, torch.mm(Ksx, y)))
+        y_pred = self.mean(x) + \
+                 torch.exp(-2.0 * self.lik.noise) * \
+                 torch.mm(Kts,
+                          torch.mm(t1,
+                                   torch.mm(Ksx, y.float()).float())
+                          ).float()
         return y_pred
 
 
