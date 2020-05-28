@@ -2,14 +2,7 @@ from gp import *
 from kernel import *
 from utility import *
 from sklearn.cluster import KMeans
-
-def set_seed(seed):
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    torch_seed = seed
-    np_seed = seed
-    np.random.seed(np_seed)
-    torch.manual_seed(torch_seed)
+from mvae import *
 
 
 def train_gp(gp_obj, test, n_iter=500, record_interval=10):
@@ -82,10 +75,8 @@ def plot_result():
     plt.savefig('gpc_vs_gpf_vs_gps_rmse.png')
 
 
-def run_gpc(seed, n_eps=1500):
+def run_gpc(seed, data, test, n_eps=1500):
     set_seed(seed)
-    data, _ = abalone_data(is_train=True)
-    test, _ = abalone_data(is_train=False)
     cluster = data_cluster(data)
     gpc = GPCluster(cluster, 'spectral_'+str(n_eps))
     res_gpc = dict()
@@ -93,20 +84,16 @@ def run_gpc(seed, n_eps=1500):
     pickle.dump(res_gpc, open('./gpc_' + str(n_eps) + '.pkl', 'wb'))
 
 
-def run_gps(seed, n_eps=1500):
+def run_gps(seed, data, test, n_eps=1500):
     set_seed(seed)
-    data, _ = abalone_data(is_train=True)
-    test, _ = abalone_data(is_train=False)
     gps = GP(data, 'spectral_'+str(n_eps))
     res_gps = dict()
     res_gps['err'], res_gps['nll'], res_gps['idx'] = train_gp(gps, test=test, n_iter=800, record_interval=25)
     pickle.dump(res_gps, open('./gps_' + str(n_eps) + '.pkl', 'wb'))
 
 
-def run_gpf(seed):
+def run_gpf(seed, data, test):
     set_seed(seed)
-    data, _ = abalone_data(is_train=True)
-    test, _ = abalone_data(is_train=False)
     gpf = GP(data, 'exponential')
     res_gpf = dict()
     res_gpf['err'], res_gpf['nll'], res_gpf['idx'] = train_gp(gpf, test=test, n_iter=800, record_interval=25)
@@ -127,12 +114,131 @@ def analyze_cluster(seed):
             rij = torch.sqrt(torch.sum(torch.pow(ci - xj, 2.0)))
             radii[i] = torch.max(radii[i], rij)
 
+
+def load_data(seed, prefix='./', encode=True, l1=0.0, l2=0.0, l3=0.0):
+    f = open(prefix + 'exp_desc.txt', 'w')
+    f.write(str(l1) + ' ' + str(l2) + ' ' + str(l3))
+    f.close()
+    train, n_train = abalone_data(is_train=True)
+    test, n_test = abalone_data(is_train=False)
+    set_seed(seed)
+    if encode:
+        dataset = TensorDataset(train['X'], train['Y'])
+        data = DataLoader(dataset, batch_size=100, shuffle=True)
+        input_dim = train['X'].shape[1]
+        output_dim = 2
+        n_component = 10
+        vae = MixtureVAE(data, input_dim, output_dim, n_component, n_sample=10)
+        n_iter = 20
+        epoch_iter = 5
+        for i in range(n_iter):
+            vae.train_vae(n_iter=epoch_iter, l1=l1, l2=l2, l3=l3)
+            torch.save(vae, prefix + 'encoder_' + str(i * epoch_iter) + '.pth')
+            z = dt(vae(train['X'], encode=True))
+            xc, yc = z[:, 0], z[:, 1]
+            plt.figure()
+            plt.scatter(xc, yc)
+            plt.savefig(prefix + 'embed_scatter_' + str(i * epoch_iter) + '.png')
+        train['X'] = vae(train['X'], encode=True)
+        test['X'] = vae(test['X'], encode=True)
+
+    return train, test
+
+
+def load_data_2(seed, prefix='./', encode=True, odim=2):
+    train, n_train = abalone_data(is_train=True)
+    test, n_test = abalone_data(is_train=False)
+    set_seed(seed)
+    if encode:
+        f = open(prefix + 'exp_result.txt', 'w')
+        dataset = TensorDataset(train['X'], train['Y'])
+        data = DataLoader(dataset, batch_size=100, shuffle=True)
+        input_dim = train['X'].shape[1]
+        output_dim = odim
+        n_component = 10
+        vae = MixtureVAE(data, input_dim, output_dim, n_component, n_sample=10)
+        n_iter = 20
+        epoch_iter = 5
+        for i in range(n_iter):
+            f.write('iter=' + str(i) + '\n')
+            vae.train_dvae(n_iter=epoch_iter)
+            torch.save(vae, prefix + 'encoder_' + str(i * epoch_iter) + '.pth')
+            z = dt(vae(train['X'], encode=True))
+            if odim == 2:
+                xc, yc = z[:, 0], z[:, 1]
+                plt.figure()
+                plt.scatter(xc, yc)
+                plt.savefig(prefix + 'embed_scatter_' + str(i * epoch_iter) + '.png')
+            f.write('Cluster membership\n')
+            kmeans = KMeans(n_clusters=10, random_state=0).fit(z)
+            cluster = [[] for _ in range(10)]
+
+            for j in range(z.shape[0]):
+                cid = kmeans.labels_[j]
+                cluster[cid].append(j)
+            f.write(str([len(cluster[j]) for j in range(10)]) + '\n')
+            f.write('Min cluster distance\n')
+            min_dist = None
+            for u in range(10):
+                for v in range(u + 1, 10):
+                    duv = np.linalg.norm(kmeans.cluster_centers_[u] - kmeans.cluster_centers_[v])
+                    if min_dist is None:
+                        min_dist = duv
+                    else:
+                        min_dist = min(min_dist, duv)
+            f.write(str(min_dist) + '\n')
+            f.write('Max cluster radius\n')
+            max_rad = None
+            for j in range(z.shape[0]):
+                cj = kmeans.labels_[j]
+                rj = np.linalg.norm(z[j] - kmeans.cluster_centers_[cj])
+                if max_rad is None:
+                    max_rad = rj
+                else:
+                    max_rad = max(max_rad, rj)
+            f.write(str(max_rad) + '\n')
+        f.close()
+
+        train['X'] = vae(train['X'], encode=True)
+        test['X'] = vae(test['X'], encode=True)
+
+    return train, test
+
 if __name__ == '__main__':
     #seed = 1001, 2002, 3003, 4004, 5005
-    #run_gpc(1001, 2500)
-    #run_gps(1001, 500)
-    #run_gpf(1001)
+    #train, test = load_data(1001, './24MayExp1/', encode=True, l1=1.0, l2=10.0, l3=10.0)
+    #train, test = load_data(1001, './24MayExp2/', encode=True, l1=10.0, l2=10.0, l3=10.0)
+    #train, test = load_data(1001, './24MayExp3/', encode=True, l1=100.0, l2=10.0, l3=10.0)
+    #train, test = load_data(1001, './24MayExp4/', encode=True, l1=1000.0, l2=10.0, l3=10.0)
+    #train, test = load_data(1001, './27MayExp1/', encode=True, l1=5000.0, l2=10.0, l3=10.0)
+    #train, test = load_data(1001, './27MayExp2/', encode=True, l1=10000.0, l2=10.0, l3=100.0)
+    #train, test = load_data(1001, './27MayExp3/', encode=True, l1=5000.0, l2=50.0, l3=10.0)
+    #train, test = load_data(1001, './27MayExp4/', encode=True, l1=10000.0, l2=50.0, l3=100.0)
+    #train, test = load_data_2(1001, './27MayExp5/', encode=True, odim=2)
+    train, test = load_data_2(1001, './27MayExp6/', encode=True, odim=3)
+    #train, test = load_data_2(1001, './27MayExp7/', encode=True, odim=4)
+    #train, test = load_data_2(1001, './27MayExp8/', encode=True, odim=5)
+    #run_gpc(1001, train, test, 2500)
+    #run_gpc(1001, train, test, 2500)
+    #run_gps(1001, train, test, 500)
+    #run_gpf(1001, train, test)
     #plot_result()
-    analyze_cluster(1001)
-
+    #analyze_cluster(1001)
+    '''
+    device = get_cuda_device()
+    data, _ = abalone_data(is_train=True)
+    recon_loss = []
+    for i in range(2):
+        vae = torch.load('./24MayExp' + str(i + 3) +'/encoder_65.pth')
+        Z = vae(data['X'], encode=True)
+        X_recon = vae(Z, encode=False)
+        recon_loss.append(torch.mean((X_recon - data['X']) ** 2) ** 0.5)
+        kmeans = KMeans(n_clusters=10, random_state=0).fit(dt(Z))
+        cluster = [[] for j in range(10)]
+        for j in range(Z.shape[0]):
+            cid = kmeans.labels_[j]
+            cluster[cid].append(j)
+        print([len(cluster[j]) for j in range(10)])
+    print(recon_loss)
+    '''
 

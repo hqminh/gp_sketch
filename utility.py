@@ -7,6 +7,12 @@ import copy
 from matplotlib import pyplot as plt
 from sklearn import cluster
 import pickle
+from torch.utils.data import Dataset, DataLoader, TensorDataset
+import torchvision
+import torchvision.datasets as datasets
+from torchvision import transforms
+from torch.distributions import Normal
+
 
 def generate_data(n_data, n_test, n_dim):
     device = get_cuda_device()
@@ -50,7 +56,7 @@ def abalone_data(is_train=True):
     y_tensor = torch.from_numpy(y).to(device)
     xmean = torch.mean(x_tensor, dim=0)
     xstd = torch.std(x_tensor, dim=0)
-    print(x_tensor.shape, xmean.shape, xstd.shape)
+    #print(x_tensor.shape, xmean.shape, xstd.shape)
     x_tensor = (x_tensor - xmean) / (xstd)
     #y_tensor = y_tensor - torch.mean(y_tensor)
     return {'X': x_tensor.float(), 'Y': y_tensor.float()}, len(X)
@@ -80,4 +86,13 @@ def dt(X):
 
 
 def get_cuda_device():
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")  # set device
+    return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")  # set device
+
+
+def set_seed(seed):
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch_seed = seed
+    np_seed = seed
+    np.random.seed(np_seed)
+    torch.manual_seed(torch_seed)
