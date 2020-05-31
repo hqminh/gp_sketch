@@ -145,9 +145,15 @@ def load_data(seed, prefix='./', encode=True, l1=0.0, l2=0.0, l3=0.0):
     return train, test
 
 
-def load_data_2(seed, prefix='./', encode=True, odim=2):
-    train, n_train = abalone_data(is_train=True)
-    test, n_test = abalone_data(is_train=False)
+def load_data_2(seed, prefix='./', name='abalone', method='dvae', alpha=8.0, beta=1.2, gamma=1.0, encode=True, odim=2, k=10, verbose=True):
+    if not os.path.isdir(prefix):
+        os.mkdir(prefix)
+    if name == 'abalone':
+        train, n_train = abalone_data(is_train=True)
+        test, n_test = abalone_data(is_train=False)
+    elif name == 'diabetes':
+        train, n_train = diabetes_data(is_train=True)
+        test, n_test = diabetes_data(is_train=False)
     set_seed(seed)
     if encode:
         f = open(prefix + 'exp_result.txt', 'w')
@@ -155,13 +161,18 @@ def load_data_2(seed, prefix='./', encode=True, odim=2):
         data = DataLoader(dataset, batch_size=100, shuffle=True)
         input_dim = train['X'].shape[1]
         output_dim = odim
-        n_component = 10
+        n_component = k
         vae = MixtureVAE(data, input_dim, output_dim, n_component, n_sample=10)
         n_iter = 20
         epoch_iter = 5
         for i in range(n_iter):
             f.write('iter=' + str(i) + '\n')
-            vae.train_dvae(n_iter=epoch_iter)
+            if method == 'dvae':
+                vae.train_dvae(n_iter=epoch_iter, alpha=alpha, beta=beta, verbose=verbose)
+            elif method == 'dsvae':
+                vae.train_dsvae(n_iter=epoch_iter, alpha=alpha, beta=beta, gamma=gamma, verbose=verbose)
+            elif method == 'dvvae':
+                vae.train_dvvae(n_iter=epoch_iter, alpha=alpha, beta=beta, gamma=gamma, verbose=verbose)
             torch.save(vae, prefix + 'encoder_' + str(i * epoch_iter) + '.pth')
             z = dt(vae(train['X'], encode=True))
             if odim == 2:
@@ -170,6 +181,7 @@ def load_data_2(seed, prefix='./', encode=True, odim=2):
                 plt.scatter(xc, yc)
                 plt.savefig(prefix + 'embed_scatter_' + str(i * epoch_iter) + '.png')
             f.write('Cluster membership\n')
+            print('Cluster membership\n')
             kmeans = KMeans(n_clusters=10, random_state=0).fit(z)
             cluster = [[] for _ in range(10)]
 
@@ -178,6 +190,8 @@ def load_data_2(seed, prefix='./', encode=True, odim=2):
                 cluster[cid].append(j)
             f.write(str([len(cluster[j]) for j in range(10)]) + '\n')
             f.write('Min cluster distance\n')
+            print(str([len(cluster[j]) for j in range(10)]) + '\n')
+            print('Min cluster distance\n')
             min_dist = None
             for u in range(10):
                 for v in range(u + 1, 10):
@@ -188,6 +202,8 @@ def load_data_2(seed, prefix='./', encode=True, odim=2):
                         min_dist = min(min_dist, duv)
             f.write(str(min_dist) + '\n')
             f.write('Max cluster radius\n')
+            print(str(min_dist) + '\n')
+            print('Max cluster radius\n')
             max_rad = None
             for j in range(z.shape[0]):
                 cj = kmeans.labels_[j]
@@ -197,6 +213,8 @@ def load_data_2(seed, prefix='./', encode=True, odim=2):
                 else:
                     max_rad = max(max_rad, rj)
             f.write(str(max_rad) + '\n')
+            print(str(max_rad) + '\n')
+            f.flush()
         f.close()
 
         train['X'] = vae(train['X'], encode=True)
@@ -204,41 +222,14 @@ def load_data_2(seed, prefix='./', encode=True, odim=2):
 
     return train, test
 
+
 if __name__ == '__main__':
-    #seed = 1001, 2002, 3003, 4004, 5005
-    #train, test = load_data(1001, './24MayExp1/', encode=True, l1=1.0, l2=10.0, l3=10.0)
-    #train, test = load_data(1001, './24MayExp2/', encode=True, l1=10.0, l2=10.0, l3=10.0)
-    #train, test = load_data(1001, './24MayExp3/', encode=True, l1=100.0, l2=10.0, l3=10.0)
-    #train, test = load_data(1001, './24MayExp4/', encode=True, l1=1000.0, l2=10.0, l3=10.0)
-    #train, test = load_data(1001, './27MayExp1/', encode=True, l1=5000.0, l2=10.0, l3=10.0)
-    #train, test = load_data(1001, './27MayExp2/', encode=True, l1=10000.0, l2=10.0, l3=100.0)
-    #train, test = load_data(1001, './27MayExp3/', encode=True, l1=5000.0, l2=50.0, l3=10.0)
-    #train, test = load_data(1001, './27MayExp4/', encode=True, l1=10000.0, l2=50.0, l3=100.0)
-    #train, test = load_data_2(1001, './27MayExp5/', encode=True, odim=2)
-    train, test = load_data_2(1001, './27MayExp6/', encode=True, odim=3)
-    #train, test = load_data_2(1001, './27MayExp7/', encode=True, odim=4)
-    #train, test = load_data_2(1001, './27MayExp8/', encode=True, odim=5)
-    #run_gpc(1001, train, test, 2500)
-    #run_gpc(1001, train, test, 2500)
-    #run_gps(1001, train, test, 500)
-    #run_gpf(1001, train, test)
-    #plot_result()
-    #analyze_cluster(1001)
-    '''
-    device = get_cuda_device()
-    data, _ = abalone_data(is_train=True)
-    recon_loss = []
-    for i in range(2):
-        vae = torch.load('./24MayExp' + str(i + 3) +'/encoder_65.pth')
-        Z = vae(data['X'], encode=True)
-        X_recon = vae(Z, encode=False)
-        recon_loss.append(torch.mean((X_recon - data['X']) ** 2) ** 0.5)
-        kmeans = KMeans(n_clusters=10, random_state=0).fit(dt(Z))
-        cluster = [[] for j in range(10)]
-        for j in range(Z.shape[0]):
-            cid = kmeans.labels_[j]
-            cluster[cid].append(j)
-        print([len(cluster[j]) for j in range(10)])
-    print(recon_loss)
-    '''
+    #train, test = load_data_2(1001, './29MayExp1/', name='abalone', method='dvae', alpha=100.0, beta=1.0, gamma=10.0)
+    #train, test = load_data_2(1001, './29MayExp2/', name='abalone', method='dvae', alpha=1.0, beta=1.0, gamma=1.0, k=2)
+    #train, test = load_data_2(1001, './29MayExp3/', name='abalone', method='dvae', alpha=1.0, beta=1.0, gamma=1.0, k=4)
+    #train, test = load_data_2(1001, './29MayExp4/', name='abalone', method='dvae', alpha=1.0, beta=1.0, gamma=1.0, k=6)
+    #train, test = load_data_2(1001, './29MayExp5/', name='abalone', method='dvae', alpha=1.0, beta=1.0, gamma=1.0, k=8)
+    #train, test = load_data_2(1001, './29MayExp6/', name='abalone', method='dvae', alpha=1.0, beta=1.0, gamma=1.0, k=6)
+    #train, test = load_data_2(1001, './29MayExp7/', name='abalone', method='dvae', alpha=1.0, beta=1.0, gamma=1.0, k=8)
+    train, test = load_data_2(1001, './29MayExp8/', name='abalone', method='dsvae', alpha=5.0, beta=1.0, gamma=5.0, k=8)
 

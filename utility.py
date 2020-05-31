@@ -9,10 +9,10 @@ from sklearn import cluster
 import pickle
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 import torchvision
-import torchvision.datasets as datasets
 from torchvision import transforms
 from torch.distributions import Normal
-
+from sklearn import datasets
+import os
 
 def generate_data(n_data, n_test, n_dim):
     device = get_cuda_device()
@@ -62,6 +62,25 @@ def abalone_data(is_train=True):
     return {'X': x_tensor.float(), 'Y': y_tensor.float()}, len(X)
 
 
+def diabetes_data(is_train=True, n_train=392, n_test=50):
+    device = get_cuda_device()
+    x, y = datasets.load_diabetes(return_X_y=True)
+
+    x = np.split(x, [n_train, n_train + n_test])
+    y = np.split(y, [n_train, n_train + n_test])
+
+    data = dict()
+    data['dim'] = x[0].shape[1]
+    data['train'] = {'X': ts(x[0]).float().to(device),
+                     'Y': ts(y[0].reshape(-1, 1)).float().to(device)}
+    data['test'] = {'X': ts(x[1]).float().to(device),
+                    'Y': ts(y[1].reshape(-1, 1)).float().to(device)}
+
+    if is_train:
+        return data['train'], n_train
+    else:
+        return data['test'], n_test
+
 def sample_rows(prob, n_rows):
     selected = []
     for i in range(n_rows):
@@ -96,3 +115,11 @@ def set_seed(seed):
     np_seed = seed
     np.random.seed(np_seed)
     torch.manual_seed(torch_seed)
+
+
+def get_mean_param(params):
+    """Return the parameter used to show reconstructions or generations.
+    For example, the mean for Normal, or probs for Bernoulli.
+    For Bernoulli, skip first parameter, as that's (scalar) temperature
+    """
+    return params[1] if params[0].dim() == 0 else params[0]
