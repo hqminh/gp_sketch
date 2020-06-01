@@ -1,3 +1,5 @@
+import os
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,6 +9,15 @@ import copy
 from matplotlib import pyplot as plt
 from sklearn import cluster
 import pickle
+
+from numpy import genfromtxt, mean, std
+
+from torch.utils.data import Dataset, DataLoader, TensorDataset
+import torchvision
+import torchvision.datasets as datasets
+from torchvision import transforms
+from torch.distributions import Normal
+
 
 def generate_data(n_data, n_test, n_dim):
     device = get_cuda_device()
@@ -56,6 +67,43 @@ def abalone_data(is_train=True):
     return {'X': x_tensor.float(), 'Y': y_tensor.float()}, len(X)
 
 
+def gas_sensor_data(datapath='./data/gas-sensor', pct_train=0.8,
+                    is_preload=True):
+    if not is_preload:
+        file_list = [os.path.join(datapath, x)
+                     for x in os.listdir(datapath) if x != 'README.txt']
+        print(file_list)
+
+        data_list = [genfromtxt(l, skip_header=1, delimiter=',') for l in file_list]
+        normed_data = np.vstack(data_list)
+        # skip first col
+        normed_data = normed_data[:, 1:]
+        # normalization - column based
+        normed_data = (normed_data - mean(normed_data, 0)) / std(normed_data, 0)
+
+        # split train and test
+        len_data = len(normed_data)
+        test_idx = int(len_data * pct_train)
+
+        data_np = normed_data[:test_idx]
+        test_np = normed_data[test_idx:]
+
+        np.save(os.path.join(datapath, 'data_np.npy'), data_np)
+        np.save(os.path.join(datapath, 'test_np.npy'), test_np)
+    else:
+        data_np = np.load(os.path.join(datapath, 'data_np.npy'))
+        test_np = np.load(os.path.join(datapath, 'test_np.npy'))
+
+    data, test = {}, {}
+    device = get_cuda_device()
+    data['X'] = torch.from_numpy(data_np[:, 1:]).to(device).float()
+    data['Y'] = torch.from_numpy(data_np[:, 0]).to(device).float()
+    test['X'] = torch.from_numpy(test_np[:, 1:]).to(device).float()
+    test['Y'] = torch.from_numpy(test_np[:, 0]).to(device).float()
+
+    return data, test
+
+
 def sample_rows(prob, n_rows):
     selected = []
     for i in range(n_rows):
@@ -81,3 +129,16 @@ def dt(X):
 
 def get_cuda_device():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")  # set device
+
+
+def set_seed(seed):
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch_seed = seed
+    np_seed = seed
+    np.random.seed(np_seed)
+    torch.manual_seed(torch_seed)
+
+
+if __name__ == "__main__":
+    gas_sensor_data(is_preload=False)
