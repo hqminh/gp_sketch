@@ -234,3 +234,84 @@ def old_config():
         print([len(cluster[j]) for j in range(10)])
     print(recon_loss)
     '''
+
+def load_data(seed, prefix='./', encode=True, l1=0.0, l2=0.0, l3=0.0):
+    f = open(prefix + 'exp_desc.txt', 'w')
+    f.write(str(l1) + ' ' + str(l2) + ' ' + str(l3))
+    f.close()
+    train, n_train = abalone_data(is_train=True)
+    test, n_test = abalone_data(is_train=False)
+    set_seed(seed)
+    if encode:
+        dataset = TensorDataset(train['X'], train['Y'])
+        data = DataLoader(dataset, batch_size=100, shuffle=True)
+        input_dim = train['X'].shape[1]
+        output_dim = 2
+        n_component = 10
+        vae = MixtureVAE(data, input_dim, output_dim, n_component, n_sample=10)
+        n_iter = 20
+        epoch_iter = 5
+        for i in range(n_iter):
+            vae.train_vae(n_iter=epoch_iter, l1=l1, l2=l2, l3=l3)
+            torch.save(vae, prefix + 'encoder_' + str(i * epoch_iter) + '.pth')
+            z = dt(vae(train['X'], encode=True))
+            xc, yc = z[:, 0], z[:, 1]
+            plt.figure()
+            plt.scatter(xc, yc)
+            plt.savefig(prefix + 'embed_scatter_' + str(i * epoch_iter) + '.png')
+        train['X'] = vae(train['X'], encode=True)
+        test['X'] = vae(test['X'], encode=True)
+
+    return train, test
+
+
+def plot_result():
+    res_gpc = pickle.load(open('./gpc.pkl', 'rb'))
+    res_gpf = pickle.load(open('./gpf.pkl', 'rb'))
+    res_gps = pickle.load(open('./gps.pkl', 'rb'))
+    plt.figure()
+    plt.plot(res_gpc['idx'], res_gpc['err'])
+    plt.plot(res_gps['idx'], res_gps['err'])
+    plt.plot(res_gpf['idx'], res_gpf['err'])
+    plt.savefig('gpc_vs_gpf_vs_gps_rmse.png')
+
+
+def run_gpc(seed, data, test, n_eps=1500):
+    set_seed(seed)
+    cluster = data_cluster(data)
+    gpc = GPCluster(cluster, 'spectral_'+str(n_eps))
+    res_gpc = dict()
+    res_gpc['err'], res_gpc['nll'], res_gpc['idx'] = train_gp(gpc, test=test, n_iter=800, record_interval=25)
+    pickle.dump(res_gpc, open('./gpc_' + str(n_eps) + '.pkl', 'wb'))
+
+
+def run_gps(seed, data, test, n_eps=1500):
+    set_seed(seed)
+    gps = GP(data, 'spectral_'+str(n_eps))
+    res_gps = dict()
+    res_gps['err'], res_gps['nll'], res_gps['idx'] = train_gp(gps, test=test, n_iter=800, record_interval=25)
+    pickle.dump(res_gps, open('./gps_' + str(n_eps) + '.pkl', 'wb'))
+
+
+def run_gpf(seed, data, test):
+    set_seed(seed)
+    gpf = GP(data, 'exponential')
+    res_gpf = dict()
+    res_gpf['err'], res_gpf['nll'], res_gpf['idx'] = train_gp(gpf, test=test, n_iter=800, record_interval=25)
+    pickle.dump(res_gpf, open('./gpf.pkl','wb'))
+
+
+
+def analyze_cluster(seed):
+    set_seed(seed)
+    data, _ = abalone_data(is_train=True)
+    test, _ = abalone_data(is_train=False)
+    cluster = data_cluster(data)
+    distance = torch.zeros(cluster['k'], cluster['k']).to(get_cuda_device())
+    radii = torch.zeros(cluster['k']).to(get_cuda_device())
+    for i in range(cluster['k']):
+        for j in range(cluster[i]['X'].shape[0]):
+            ci = cluster['centroids'][i]
+            xj = cluster[i]['X'][j]
+            rij = torch.sqrt(torch.sum(torch.pow(ci - xj, 2.0)))
+            radii[i] = torch.max(radii[i], rij)

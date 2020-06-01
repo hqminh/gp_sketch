@@ -1,18 +1,18 @@
-import torch
+import torch, torchvision
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as opt
-import numpy as np
-import copy
-from matplotlib import pyplot as plt
-from sklearn import cluster
-import pickle
 from torch.utils.data import Dataset, DataLoader, TensorDataset
-import torchvision
 from torchvision import transforms
 from torch.distributions import Normal
+from matplotlib import pyplot as plt
 from sklearn import datasets
+from sklearn.cluster import KMeans
+import numpy as np
+import copy
 import os
+import pickle
+
 
 def generate_data(n_data, n_test, n_dim):
     device = get_cuda_device()
