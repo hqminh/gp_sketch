@@ -82,7 +82,7 @@ class Experiment():
         if 'ssgp' in method:
             n_eps = method.split('_')[1]
             cluster = Experiment.cluster_data(train)
-            gpc = GPCluster(cluster, 'spectral' + n_eps)
+            gpc = GPCluster(cluster, 'spectral_' + n_eps)
             return gpc
 
         elif 'full' in method:

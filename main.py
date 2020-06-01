@@ -12,7 +12,7 @@ if __name__ == '__main__':
     # vae = ['abalone.pth', 'diabetes.pth']
     vae = ['encoder_30.pth']
     dataset = ['abalone']
-    method = ['full', 'ssgp_32']
+    method = ['ssgp_32', 'full']
     seed = [1001]
 
     for i, ds in enumerate(dataset):
