@@ -94,7 +94,12 @@ class Experiment():
         train, test = self.load_data()
         if self.embedding:
             if self.vae is None:
-                pass
+                self.vae = MixtureVAE(train, train['X'].shape[1], 2, 10, n_sample=10)
+                n_iter = 20
+                epoch_iter = 5
+                for i in range(n_iter):
+                    self.vae.train_dsvae(n_iter=epoch_iter, alpha=100.0, beta=1.0, gamma=10.0, verbose=True)
+
             train['X'] = ts(dt(self.vae(train['X']))).to(get_cuda_device())
             test['X'] = ts(dt(self.vae(test['X']))).to(get_cuda_device())
 
