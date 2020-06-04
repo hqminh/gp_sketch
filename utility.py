@@ -8,9 +8,11 @@ from torch.distributions import Normal
 from matplotlib import pyplot as plt
 from sklearn import datasets
 from sklearn.cluster import KMeans
+from numpy import genfromtxt, mean, std
 import numpy as np
 import copy
 import os
+import sys
 import pickle
 
 
@@ -56,9 +58,7 @@ def abalone_data(is_train=True):
     y_tensor = torch.from_numpy(y).to(device)
     xmean = torch.mean(x_tensor, dim=0)
     xstd = torch.std(x_tensor, dim=0)
-    #print(x_tensor.shape, xmean.shape, xstd.shape)
     x_tensor = (x_tensor - xmean) / (xstd)
-    #y_tensor = y_tensor - torch.mean(y_tensor)
     return {'X': x_tensor.float(), 'Y': y_tensor.float()}, len(X)
 
 
@@ -80,6 +80,44 @@ def diabetes_data(is_train=True, n_train=392, n_test=50):
         return data['train'], n_train
     else:
         return data['test'], n_test
+
+
+def gas_sensor_data(datapath='./data/gas-sensor', pct_train=0.8,
+                    is_preload=True):
+    if not is_preload:
+        file_list = [os.path.join(datapath, x)
+                     for x in os.listdir(datapath) if x != 'README.txt']
+        print(file_list)
+
+        data_list = [genfromtxt(l, skip_header=1, delimiter=',') for l in file_list]
+        normed_data = np.vstack(data_list)
+        # skip first col
+        normed_data = normed_data[:, 1:]
+        # normalization - column based
+        normed_data = (normed_data - mean(normed_data, 0)) / std(normed_data, 0)
+
+        # split train and test
+        len_data = len(normed_data)
+        test_idx = int(len_data * pct_train)
+
+        data_np = normed_data[:test_idx]
+        test_np = normed_data[test_idx:]
+
+        np.save(os.path.join(datapath, 'data_np.npy'), data_np)
+        np.save(os.path.join(datapath, 'test_np.npy'), test_np)
+    else:
+        data_np = np.load(os.path.join(datapath, 'data_np.npy'))
+        test_np = np.load(os.path.join(datapath, 'test_np.npy'))
+
+    data, test = {}, {}
+    device = get_cuda_device()
+    data['X'] = torch.from_numpy(data_np[:, 1:]).to(device).float()
+    data['Y'] = torch.from_numpy(data_np[:, 0]).to(device).float()
+    test['X'] = torch.from_numpy(test_np[:, 1:]).to(device).float()
+    test['Y'] = torch.from_numpy(test_np[:, 0]).to(device).float()
+
+    return data, test
+
 
 def sample_rows(prob, n_rows):
     selected = []
@@ -105,7 +143,7 @@ def dt(X):
 
 
 def get_cuda_device():
-    return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")  # set device
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")  # set device
 
 
 def set_seed(seed):
@@ -117,9 +155,5 @@ def set_seed(seed):
     torch.manual_seed(torch_seed)
 
 
-def get_mean_param(params):
-    """Return the parameter used to show reconstructions or generations.
-    For example, the mean for Normal, or probs for Bernoulli.
-    For Bernoulli, skip first parameter, as that's (scalar) temperature
-    """
-    return params[1] if params[0].dim() == 0 else params[0]
+if __name__ == "__main__":
+    gas_sensor_data(is_preload=False)

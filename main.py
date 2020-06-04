@@ -6,14 +6,14 @@ if __name__ == '__main__':
     result_folder = './1JunExpSet1/'
     if not os.path.isdir(result_folder):
         os.mkdir(result_folder)
-    # dataset = ['abalone', 'diabetes']
-    # method = ['full', 'ssgp_32', 'ssgp_64', 'ssgp_128', 'ssgp_256', 'ssgp_512', 'ssgp_1024']
+    #dataset = ['abalone']
+    method = ['full', 'ssgp_32', 'ssgp_64', 'ssgp_128', 'ssgp_256', 'ssgp_512', 'ssgp_1024']
     # seed = [1001, 1002, 1003, 1004, 1005]
-    # vae = ['abalone.pth', 'diabetes.pth']
+    #vae = ['abalone.pth']
     vae = ['encoder_30.pth']
     dataset = ['abalone']
-    method = ['ssgp_32', 'full']
-    seed = [1001]
+    #method = ['ssgp_32', 'full']
+    seed = [1001, 1002, 1003]
 
     for i, ds in enumerate(dataset):
         vae_model = torch.load(prefix + vae[i])

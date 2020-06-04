@@ -167,18 +167,19 @@ class MixtureVAE(nn.Module):
 
         qczx_mu = torch.mean(torch.cat(qizx_mu), dim=0)
         qczx_log_var = torch.mean(torch.cat(qizx_log_var), dim=0)
-        kl_separation = ts(0.0).to(self.device)
+        kl_separation = torch.zeros(self.n_component).to(self.device)
         for j in range(self.n_component):
             ld = torch.sum(qizx_log_var[j]) - torch.sum(qczx_log_var)
             tr = torch.sum(torch.exp(qczx_log_var - qizx_log_var[j]))
             qd = torch.sum((qczx_mu - qizx_mu[j]) ** 2 / torch.exp(-1.0 * qczx_log_var))
-            kl_separation += ld + tr + qd
+            kl_separation[j] = ld + tr + qd
+
 
         # ELBO components
         elbo = log_pxz
         elbo_alpha = log_qz - log_pz
         elbo_beta = log_qzx - log_pz
-        elbo_gamma = 0.5 * kl_separation / (self.n_component * X.shape[0])
+        elbo_gamma = 0.5 * torch.min(kl_separation) / X.shape[0]
         if verbose: print(elbo.item(), elbo_alpha.item(), elbo_beta.item(), elbo_gamma.item())
         return elbo - beta * elbo_beta - alpha * elbo_alpha + gamma * elbo_gamma
 
