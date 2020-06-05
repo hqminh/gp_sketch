@@ -11,7 +11,7 @@ class VAEGP(nn.Module):
         self.dataset = TensorDataset(train['X'], train['Y'])
         self.data = DataLoader(self.dataset, batch_size=200, shuffle=True)
         self.n_eps = int(gp_method.split('_')[1])
-        self.vae = MixtureVAE(self.data, train['X'].shape[1], embed_dim, vae_cluster, n_sample=self.n_eps)
+        self.vae = MixtureVAE(self.data, train['X'].shape[1], embed_dim, vae_cluster, n_sample=50)
         self.original = train
         self.train = {'X': self.vae(train['X'], grad=False), 'Y': train['Y']}
         #self.gp = Experiment.create_gp_object(self.train, gp_method)
