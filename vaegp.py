@@ -2,7 +2,7 @@ from utility import *
 from gp import *
 from mvae import *
 from experiments import *
-
+from torch.nn.utils.clip_grad import clip_grad_value_
 
 class VAEGP(nn.Module):
     def __init__(self, train, vae_cluster=8, embed_dim=4, gp_method='vaegp_32'):
@@ -61,6 +61,7 @@ class VAEGP(nn.Module):
                 batch_elbo += delbo * X.shape[0]
                 batch_loss += loss * X.shape[0]
                 loss.backward()
+                clip_grad_value_(self.model.parameters(), 20)
                 optimizer.step()
                 torch.cuda.empty_cache()
             if i % pred_interval == 0:
@@ -165,6 +166,7 @@ class GP_wrapper(nn.Module):
                 nll = self.gp.NLL_batch(X, Y)
                 batch_nll += nll * X.shape[0]
                 nll.backward()
+                clip_grad_value_(self.model.parameters(), 20)
                 optimizer.step()
                 torch.cuda.empty_cache()
             if i % pred_interval == 0:
