@@ -21,7 +21,7 @@ class VAEGP(nn.Module):
         self.gp_model = nn.ModuleList([self.gp.cov, self.gp.mean])
         self.history = []
 
-    def train_gp(self, seed=0, burn_iter=100, n_iter=300, lmbda=1.0, pred_interval=5, test=None, verbose=True, n_epoch=50):
+    def train_gp(self, seed=0, burn_iter=100, n_iter=100, lmbda=1.0, pred_interval=5, test=None, verbose=True, n_epoch=50):
         set_seed(seed)
         print('SEED=', seed)
         optimizer = opt.Adam(self.model.parameters())
@@ -182,26 +182,25 @@ class GP_wrapper(nn.Module):
         return self.history
 
 
-def deploy(prefix, method, dataset, plot=True):
+def deploy(snum, prefix, method, dataset, plot=True):
     if not os.path.isdir(prefix):
         os.mkdir(prefix)
     train, test = Experiment.load_data(dataset)
-    seed = [1002, 2603, 411, 807, 1008]
+    seed = [int(snum)]
     res = dict()
     for s in seed:
         if 'vaegp' in method:
             vaegp = VAEGP(train, gp_method=method)
-            '''
             res[s] = vaegp.train_gp(seed=s, n_iter=300, lmbda=1.0, pred_interval=10, test=test, verbose=True)
             torch.save(vaegp, prefix + str(s) + '_' + method + '.pth')
             '''
             try:
                 res[s] = vaegp.train_gp(seed=s, n_iter=300, lmbda=1.0, pred_interval=10, test=test, verbose=True)
                 torch.save(vaegp, prefix + str(s) + '_' + method + '.pth')
-            
             except RuntimeError:
                 res[s] = vaegp.history
                 torch.save(vaegp, prefix + str(s) + '_' + method + '.pth')
+            '''
         else:
             gp = GP_wrapper(train, gp_method=method)
             res[s] = gp.train_gp(seed=s, n_iter=300, pred_interval=10, test=test, verbose=True)
@@ -235,10 +234,8 @@ def deploy(prefix, method, dataset, plot=True):
 
 if __name__ == '__main__':
     #deploy(prefix='./results/gas', method='vaegp_32', dataset='gas', plot=False)
-    deploy(prefix='./results/abalone', method='vaegp_32', dataset='abalone', plot=False)
+    #deploy(prefix='./results/abalone', method='vaegp_32', dataset='abalone', plot=False)
 
-    '''
     torch.cuda.set_device(int(sys.argv[4]))
-    deploy(sys.argv[1], sys.argv[2], sys.argv[3], plot=False)
-    '''
+    deploy(sys.argv[5], sys.argv[1], sys.argv[2], sys.argv[3], plot=False)
 
