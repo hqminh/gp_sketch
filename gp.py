@@ -122,7 +122,9 @@ class GP(nn.Module):
         nll = 0.5 * torch.sum(torch.log(L.diag())) + 0.5 * torch.mm(Linv.t(), Linv)
         return nll
 
-    def forward(self, x, batch_train=None, batch_label=None):
+    def forward(self, x, batch_train=None, batch_label=None, grad=False):
+        if not grad:
+            torch.no_grad()
         if batch_label is None:
             y = self.data['Y'].float() - self.mean(self.data['X']).float()
             ktx = self.cov(x, self.data['X']).float()
@@ -183,7 +185,10 @@ class GPCluster(nn.Module):
         nll = 0.5 * torch.sum(torch.log(L.diag())) + 0.5 * torch.mm(Linv.t(), Linv)
         return nll
 
-    def forward(self, x):
+    def forward(self, x, grad=False):
+        if not grad:
+            torch.no_grad()
+
         ktt = self.cov(x)
         y_pred = torch.zeros(x.shape[0], 1).to(self.device)
         y_var = torch.zeros(x.shape[0], x.shape[0]).to(self.device)

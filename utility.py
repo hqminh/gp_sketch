@@ -112,9 +112,9 @@ def gas_sensor_data(datapath='./data/gas-sensor', pct_train=0.8,
     data, test = {}, {}
     device = get_cuda_device()
     data['X'] = torch.from_numpy(data_np[:, 1:]).to(device).float()
-    data['Y'] = torch.from_numpy(data_np[:, 0]).to(device).float()
+    data['Y'] = torch.from_numpy(data_np[:, 0]).reshape(-1, 1).to(device).float()
     test['X'] = torch.from_numpy(test_np[:, 1:]).to(device).float()
-    test['Y'] = torch.from_numpy(test_np[:, 0]).to(device).float()
+    test['Y'] = torch.from_numpy(test_np[:, 0]).reshape(-1, 1).to(device).float()
 
     return data, test
 
@@ -156,4 +156,5 @@ def set_seed(seed):
 
 
 if __name__ == "__main__":
-    gas_sensor_data(is_preload=False)
+    train, test = gas_sensor_data(is_preload=True)
+    print(train['X'].shape, test['X'].shape)

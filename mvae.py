@@ -63,7 +63,9 @@ class MixtureGaussianNet(nn.Module):
             self.components.append(GaussianNet(input_dim, output_dim, bias=bias))
         self.weights = nn.Linear(input_dim, n_component).to(self.device)
 
-    def forward(self, Z, X=None):  # return log p(z|x) for each pair (z, x) or log p(z) for each z if X is None
+    def forward(self, Z, X=None, grad=True):  # return log p(z|x) for each pair (z, x) or log p(z) for each z if X is None
+        if not grad:
+            torch.no_grad()
         if X is None:
             X = torch.zeros((Z.shape[0], self.input_dim)).to(self.device)
         res = torch.zeros((Z.shape[0], self.n_component)).to(self.device)
@@ -207,7 +209,9 @@ class MixtureVAE(nn.Module):
         if verbose: print(elbo.item(), elbo_alpha.item(), elbo_beta.item(), elbo_gamma.item())
         return elbo - beta * elbo_beta - alpha * elbo_alpha - gamma * elbo_gamma
 
-    def forward(self, data, encode=True):
+    def forward(self, data, encode=True, grad=True):
+        if not grad:
+            torch.no_grad()
         if encode is True:
             res = self.qz_x.sample(data)
             return torch.mean(res, dim=0)  # data.shape[0] by output_dim

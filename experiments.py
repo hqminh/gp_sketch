@@ -54,7 +54,18 @@ class Experiment:
         elif dataset == 'diabetes':
             train, n_train = diabetes_data(is_train=True)
             test, n_test = diabetes_data(is_train=False)
-
+        elif dataset == 'gas':
+            full_train, full_test = gas_sensor_data(is_preload=True)
+            p1 = torch.randperm(full_test['X'].size(0))
+            idx_test = p1[:2000]
+            test = {'X': full_test['X'][idx_test],
+                    'Y': full_test['Y'][idx_test]
+                    }
+            p2 = torch.randperm(full_train['X'].size(0))
+            idx_train = p2[:20000]
+            train = {'X': full_train['X'][idx_train],
+                     'Y': full_train['Y'][idx_train]
+                     }
         return train, test
 
     @staticmethod
