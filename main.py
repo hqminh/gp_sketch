@@ -168,6 +168,8 @@ def load_data_2(seed, prefix='./', name='abalone', method='dvae', alpha=8.0,
     test, n_test = abalone_data(is_train=False)
   elif name == 'gas':
     train, test = gas_sensor_data()
+  elif name == 'wine':
+    train, test = wine_data()
 
   set_seed(seed)
   if encode:
@@ -274,7 +276,7 @@ if __name__ == '__main__':
     # train, test = load_data_2(1001, './27MayExp8/', encode=True, odim=5)
     # train, test = load_data_2(1001, './31MayDim{}/'.format(sys.argv[1]), encode=True, odim=int(sys.argv[1]))
 
-    spaces = list(np.linspace(0.1, 1., 5))
+    spaces = list(np.linspace(0.5, 1., 3))
     abg = [(i, j, k) for i in spaces for j in spaces for k in spaces]
 
     for (alpha, beta, gamma) in abg:

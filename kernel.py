@@ -99,7 +99,7 @@ class MeanFunction(nn.Module):  # simply a constant mean function
     def forward(self, U):  # simply the constant mean function; input form: (_, x_dim)
         assert len(U.size()) == 2, "Input matrix must be 2D"
         n = U.size(0)
-        return torch.ones(n, 1).to(torch.device('cuda')) * self.mean
+        return torch.ones(n, 1).to(get_cuda_device()) * self.mean
 
 
 class LikFunction(nn.Module):  # return log likelihood of a Gaussian N(z | x, noise^2 * I)

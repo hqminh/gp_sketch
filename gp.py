@@ -11,8 +11,6 @@ class Sampler(nn.Module):
         self.cov = CovFunction(n_dim).to(self.device)
 
     def recursive_sampling(self, X, tolerance):
-        X = X.to(self.device)
-
         m = X.shape[0]
         print(m)
         if m <= 192 * np.log(1.0 / tolerance):
@@ -21,17 +19,13 @@ class Sampler(nn.Module):
         selected = sample_rows(0.5 * np.ones(m), m)
         Xs = X[selected, :].view(-1, self.n_dim)
         Ss = torch.eye(m)[:, selected].view(m, -1).to(self.device)
-        St = self.recursive_sampling(Xs, tolerance /
-                                                       3.0).to(self.device)
+        St = self.recursive_sampling(Xs, tolerance / 3.0)
         print(St.shape[1])
         Sh = torch.mm(Ss, St)
         selected = torch.argmax(Sh, dim=1)
         Xh = X[selected, :].view(-1, self.n_dim)
         Khh = self.cov(Xh)
-        phi = torch.inverse(Khh +
-                            torch.exp(2.0 * self.noise).to(self.device) *
-                            torch.eye(selected.shape[0]).to(self.device)
-                            )
+        phi = torch.inverse(Khh + torch.exp(2.0 * self.noise) * torch.eye(selected.shape[0]))
         l = np.zeros(m)
         for i in range(m):
             Kii = self.cov(X[i, :].view(1, -1))[0, 0]
@@ -81,12 +75,7 @@ class SGP(nn.Module):
         Kts, Kss, Kxs = self.nystrom(x)
         Ksx = Kxs.t()
         t1 = torch.inverse(Kss + torch.exp(-2.0 * self.lik.noise) * torch.mm(Ksx, Kxs))
-        y_pred = self.mean(x) + \
-                 torch.exp(-2.0 * self.lik.noise) * \
-                 torch.mm(Kts,
-                          torch.mm(t1,
-                                   torch.mm(Ksx, y.float()).float())
-                          ).float()
+        y_pred = self.mean(x) + torch.exp(-2.0 * self.lik.noise) * torch.mm(Kts, torch.mm(t1, torch.mm(Ksx, y)))
         return y_pred
 
 
@@ -100,11 +89,11 @@ class GP(nn.Module):
         if cov_func == 'exponential':
             self.cov = CovFunction(self.n_dim, ls=ls).to(self.device)
         elif 'spectral' in cov_func:
-            n_eps = float(cov_func.split('_')[1])
-            self.cov = SpectralCov(self.n_dim, n_eps=n_eps, ls=ls).to(self.device)
+            self.n_eps = float(cov_func.split('_')[1])
+            self.cov = SpectralCov(self.n_dim, n_eps=self.n_eps, ls=ls).to(self.device)
         elif 'chi' in cov_func:
-            n_eps = float(cov_func.split('_')[1])
-            self.cov = ChiSpectralCov(self.n_dim, n_eps=n_eps, ls=ls).to(self.device)
+            self.n_eps = float(cov_func.split('_')[1])
+            self.cov = ChiSpectralCov(self.n_dim, n_eps=self.n_eps, ls=ls).to(self.device)
         self.mean = MeanFunction().to(self.device)
         self.lik = LikFunction().to(self.device)
 
@@ -124,11 +113,28 @@ class GP(nn.Module):
         nll = 0.5 * torch.sum(torch.log(L.diag())) + 0.5 * torch.mm(Linv.t(), Linv)
         return nll
 
-    def forward(self, x):
-        y = self.data['Y'].float() - self.mean(self.data['X']).float()
-        ktx = self.cov(x, self.data['X']).float()
+    def NLL_batch(self, X, Y):
+        y = Y.float() - self.mean(X).float()
+        Kxx = self.cov(X)
+        torch.diagonal(Kxx).fill_(torch.exp(2.0 * self.cov.sn) + torch.exp(2.0 * self.lik.noise))
+        L = torch.cholesky(Kxx, upper=False)
+        Linv = torch.mm(torch.inverse(L), y)
+        nll = 0.5 * torch.sum(torch.log(L.diag())) + 0.5 * torch.mm(Linv.t(), Linv)
+        return nll
+
+    def forward(self, x, batch_train=None, batch_label=None, grad=False):
+        if not grad:
+            torch.no_grad()
+        if batch_label is None:
+            y = self.data['Y'].float() - self.mean(self.data['X']).float()
+            ktx = self.cov(x, self.data['X']).float()
+            Kxx = self.cov(self.data['X'])
+        else:
+            y = batch_label.float() - self.mean(batch_train).float()
+            ktx = self.cov(x, batch_train).float()
+            Kxx = self.cov(batch_train)
+
         ktt = self.cov(x)
-        Kxx = self.cov(self.data['X'])
         Q_inv = torch.inverse(Kxx + torch.exp(2.0 * self.lik.noise) * torch.eye(self.n_data).to(self.device)).float()
         ktx_Q_inv = torch.mm(ktx, Q_inv)
         y_pred = self.mean(x) + torch.mm(ktx_Q_inv, y)
@@ -170,7 +176,19 @@ class GPCluster(nn.Module):
             nll = -0.5 * torch.logdet(Q_inv) + 0.5 * torch.mm(y.t(), torch.mm(Q_inv, y))[0, 0]
         return nll
 
-    def forward(self, x):
+    def NLL_batch(self, X, Y):
+        y = Y.float() - self.mean(X).float()
+        Kxx = self.cov(X)
+        torch.diagonal(Kxx).fill_(torch.exp(2.0 * self.cov.sn) + torch.exp(2.0 * self.lik.noise))
+        L = torch.cholesky(Kxx, upper=False)
+        Linv = torch.mm(torch.inverse(L), y)
+        nll = 0.5 * torch.sum(torch.log(L.diag())) + 0.5 * torch.mm(Linv.t(), Linv)
+        return nll
+
+    def forward(self, x, grad=False):
+        if not grad:
+            torch.no_grad()
+
         ktt = self.cov(x)
         y_pred = torch.zeros(x.shape[0], 1).to(self.device)
         y_var = torch.zeros(x.shape[0], x.shape[0]).to(self.device)

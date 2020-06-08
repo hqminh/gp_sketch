@@ -17,6 +17,7 @@ import torchvision
 import torchvision.datasets as datasets
 from torchvision import transforms
 from torch.distributions import Normal
+import sys
 
 
 def generate_data(n_data, n_test, n_dim):
@@ -65,6 +66,58 @@ def abalone_data(is_train=True):
     x_tensor = (x_tensor - xmean) / (xstd)
     #y_tensor = y_tensor - torch.mean(y_tensor)
     return {'X': x_tensor.float(), 'Y': y_tensor.float()}, len(X)
+
+
+def diabetes_data(is_train=True, n_train=392, n_test=50):
+    device = get_cuda_device()
+    x, y = datasets.load_diabetes(return_X_y=True)
+
+    x = np.split(x, [n_train, n_train + n_test])
+    y = np.split(y, [n_train, n_train + n_test])
+
+    data = dict()
+    data['dim'] = x[0].shape[1]
+    data['train'] = {'X': ts(x[0]).float().to(device),
+                     'Y': ts(y[0].reshape(-1, 1)).float().to(device)}
+    data['test'] = {'X': ts(x[1]).float().to(device),
+                    'Y': ts(y[1].reshape(-1, 1)).float().to(device)}
+
+    if is_train:
+        return data['train'], n_train
+    else:
+        return data['test'], n_test
+
+
+
+def wine_data(datapath='./data/wine', pct_train=0.8):
+    red_data = genfromtxt(os.path.join(datapath, 'winequality-red.csv'),
+                          skip_header=1, delimiter=';')
+    white_data = genfromtxt(os.path.join(datapath, 'winequality-white.csv'),
+                            skip_header=1, delimiter=';')
+
+    print(red_data.shape, white_data.shape)
+
+    normed_data = np.vstack([red_data, white_data])
+    normed_data = (normed_data - mean(normed_data, 0)) / std(normed_data, 0)
+
+    # split train and test
+    len_data = len(normed_data)
+    test_idx = int(len_data * pct_train)
+
+    data_np = normed_data[:test_idx]
+    test_np = normed_data[test_idx:]
+
+    np.save(os.path.join(datapath, 'data_np.npy'), data_np)
+    np.save(os.path.join(datapath, 'test_np.npy'), test_np)
+
+    data, test = {}, {}
+    device = get_cuda_device()
+    data['X'] = torch.from_numpy(data_np[:, :-1]).to(device).float()
+    data['Y'] = torch.from_numpy(data_np[:, -1].reshape(-1, 1)).to(device).float()
+    test['X'] = torch.from_numpy(test_np[:, :-1]).to(device).float()
+    test['Y'] = torch.from_numpy(test_np[:, -1].reshape(-1, 1)).to(device).float()
+
+    return data, test
 
 
 def gas_sensor_data(datapath='./data/gas-sensor', pct_train=0.8,
@@ -140,5 +193,12 @@ def set_seed(seed):
     torch.manual_seed(torch_seed)
 
 
+def init_weights(m):
+    if type(m) == nn.Linear:
+        torch.nn.init.xavier_normal(m.weight)
+        m.bias.data.fill_(0.01)
+
 if __name__ == "__main__":
-    gas_sensor_data(is_preload=False)
+    # gas_sensor_data(is_preload=False)
+    data, test = wine_data()
+    import  pdb; pdb.set_trace()
